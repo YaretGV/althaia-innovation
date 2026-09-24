@@ -31,6 +31,7 @@ export function AppProvider({ children, currentUser, onLogout }) {
   const [projectTasks,   setProjectTasks]   = useState({})
   const [timelineEvents, setTimelineEvents] = useState({})
   const [projectFeedback,setProjectFeedback]= useState({})
+  const [projectDocuments,setProjectDocuments]= useState({})
   const [notifications,  setNotifs]         = useState(() => loadLS(ALERTS_KEY, globalKPIs.alerts))
   const [loading,        setLoading]        = useState(true)
   const [dbWriteError,   setDbWriteError]   = useState(null)
@@ -47,6 +48,7 @@ export function AppProvider({ children, currentUser, onLogout }) {
             supabase.from('project_tasks').select('*'),
             supabase.from('timeline_events').select('*'),
             supabase.from('project_feedback').select('*'),
+            supabase.from('documents').select('*'),
           ])
           if (pErr) throw pErr
 
@@ -77,12 +79,19 @@ export function AppProvider({ children, currentUser, onLogout }) {
           setProjectTasks(rowsToTaskMap(tData || []))
           setTimelineEvents(rowsToEventMap(eData || []))
           setProjectFeedback(rowsToFeedbackMap(fData || []))
+          setProjectDocuments((dData || []).reduce((map, row) => {
+            const pid = Number(row.project_id)
+            if (!map[pid]) map[pid] = []
+            map[pid].push(row)
+            return map
+          }, {}))
         } catch (err) {
           console.error('Supabase error, usant localStorage:', err)
           setProjects(loadLS(STORAGE_KEY, initialProjects))
           setProjectTasks(loadLS(TASKS_KEY, {}))
           setTimelineEvents(loadLS(TIMELINE_KEY, {}))
           setProjectFeedback(loadLS(FEEDBACK_KEY, {}))
+          setProjectDocuments({})
         }
       } else {
         // Sense Supabase → localStorage
@@ -301,6 +310,40 @@ export function AppProvider({ children, currentUser, onLogout }) {
     }
   }, [])
 
+  // ── Documents de projecte ─────────────────────────────────────────────────
+  const getDocumentsForProject = useCallback((id) => {
+    return projectDocuments[Number(id)] || []
+  }, [projectDocuments])
+
+  const addDocument = useCallback((projectId, documentData) => {
+    const pid = Number(projectId)
+    const doc = { ...documentData, project_id: pid }
+    setProjectDocuments(prev => ({ ...prev, [pid]: [...(prev[pid] || []), doc] }))
+    if (hasDB) {
+      dbWrite('documents', 'insert', { data: doc })
+        .catch(err => {
+          console.error('addDocument:', err.message)
+          setProjectDocuments(prev => ({
+            ...prev,
+            [pid]: (prev[pid] || []).filter(d => d.id !== doc.id),
+          }))
+        })
+    }
+    return doc
+  }, [])
+
+  const deleteDocument = useCallback((projectId, documentId) => {
+    const pid = Number(projectId)
+    setProjectDocuments(prev => ({
+      ...prev,
+      [pid]: (prev[pid] || []).filter(d => d.id !== documentId),
+    }))
+    if (hasDB) {
+      dbWrite('documents', 'delete', { id: documentId })
+        .catch(err => console.error('deleteDocument:', err.message))
+    }
+  }, [])
+
   // ── KPIs computats des de dades reals ───────────────────────────────────────
   const liveKPIs = useMemo(() => {
     const hadPilot    = projects.filter(p => p.current_phase >= 5).length
@@ -408,6 +451,7 @@ export function AppProvider({ children, currentUser, onLogout }) {
       addTask, updateTask, deleteTask,
       addTimelineEvent, deleteTimelineEvent,
       addFeedback, deleteFeedback,
+      getDocumentsForProject, addDocument, deleteDocument,
       getProjectById, getProjectsByPhase, getUserById,
       getTasksForProject, getFeedbackForProject,
       getPilotForProject, getEvalForProject,
