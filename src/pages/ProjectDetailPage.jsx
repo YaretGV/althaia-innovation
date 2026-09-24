@@ -12,9 +12,11 @@ import {
   AlertCircle, Clock, Tag, ArrowRight, Trash2,
   Plus, Check, ShieldCheck, ChevronDown, ChevronUp,
   Flag, Milestone, X, RotateCcw, MapPin, User as UserIcon, Star,
+  FileText, Upload, ExternalLink, Download, File, Trash2 as TrashFile,
 } from 'lucide-react'
 import { IconTarget, IconPerson, IconShield, IconLink, IconTrendUp, IconRocket, IconFlagMark, IconCalendar, IconPackage, IconNote } from '../components/icons/CustomIcons.jsx'
 import clsx from 'clsx'
+import { supabase } from '../lib/supabase'
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis, ResponsiveContainer,
 } from 'recharts'
@@ -29,6 +31,7 @@ const TABS = [
   { id: 'ideas',      icon: AlertCircle, label: 'Idees'         },
   { id: 'feedback',   icon: MessageSquare,label: 'Feedback'     },
   { id: 'timeline',   icon: History,     label: 'Timeline'      },
+  { id: 'documents',  icon: FileText,    label: 'Documentació'   },
 ]
 
 function TabBar({ active, onChange }) {
@@ -905,6 +908,148 @@ function FeedbackTab({ project, feedbackList, onAdd, onDelete }) {
   )
 }
 
+// ─── Documentation Tab ───────────────────────────────────────────────────────
+const DOCUMENT_MAX_SIZE = 25 * 1024 * 1024
+const DOCUMENT_TYPES = [
+  'application/pdf',
+  'text/plain',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+]
+
+function formatBytes(bytes) {
+  if (!bytes) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  return `${(bytes / Math.pow(1024, i)).toFixed(i ? 1 : 0)} ${units[i]}`
+}
+
+function fileIcon(mime) {
+  return mime === 'application/pdf' ? FileText : File
+}
+
+function DocumentsTab({ project, documents, onAdd, onDelete }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleUpload = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    setError('')
+    if (!DOCUMENT_TYPES.includes(file.type)) {
+      setError('Format no admès. Pots pujar PDF, Word, TXT, Excel o PowerPoint.')
+      return
+    }
+    if (file.size > DOCUMENT_MAX_SIZE) {
+      setError('El fitxer supera el límit de 25 MB.')
+      return
+    }
+    if (!supabase) {
+      setError('Supabase no està configurat.')
+      return
+    }
+
+    setBusy(true)
+    try {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const path = `${project.id}/${Date.now()}-${safeName}`
+      const { error: uploadError } = await supabase.storage
+        .from('project-documents')
+        .upload(path, file, { contentType: file.type, upsert: false })
+      if (uploadError) throw uploadError
+
+      const { data: publicData } = supabase.storage
+        .from('project-documents')
+        .getPublicUrl(path)
+
+      onAdd(project.id, {
+        id: Date.now(),
+        file_name: file.name,
+        file_url: publicData.publicUrl,
+        file_size: file.size,
+        mime_type: file.type || 'application/octet-stream',
+        type: file.type === 'application/pdf' ? 'pdf' : 'other',
+        version: '1.0',
+        description: '',
+        uploaded_at: new Date().toISOString(),
+        storage_path: path,
+      })
+    } catch (err) {
+      setError(err.message || 'No s\'ha pogut pujar el document.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const removeDocument = async (doc) => {
+    if (!window.confirm(`Eliminar «${doc.file_name}»?`)) return
+    if (supabase && doc.storage_path) {
+      const { error: storageError } = await supabase.storage
+        .from('project-documents').remove([doc.storage_path])
+      if (storageError) {
+        setError(storageError.message)
+        return
+      }
+    }
+    onDelete(project.id, doc.id)
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h4 className="text-sm font-semibold text-gray-700">Documentació del projecte</h4>
+          <p className="text-xs text-gray-400 mt-1">PDF, Word, TXT, Excel i PowerPoint · màxim 25 MB</p>
+        </div>
+        <label className={clsx('btn-primary text-xs py-1.5 px-3 cursor-pointer', busy && 'opacity-50 pointer-events-none')}>
+          <Upload size={13} /> {busy ? 'Pujant...' : 'Pujar document'}
+          <input type="file" className="hidden" accept=".pdf,.txt,.doc,.docx,.xls,.xlsx,.ppt,.pptx" onChange={handleUpload} disabled={busy} />
+        </label>
+      </div>
+
+      {error && <div className="rounded-xl bg-red-50 text-red-700 border border-red-100 p-3 text-xs">{error}</div>}
+
+      {documents.length === 0 ? (
+        <div className="text-center py-12 text-gray-400">
+          <FileText size={36} className="mx-auto mb-3 opacity-30" />
+          <p className="text-sm">Encara no hi ha documents en aquest projecte.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {documents.map(doc => {
+            const Icon = fileIcon(doc.mime_type)
+            return (
+              <div key={doc.id} className="flex items-center gap-3 border border-gray-200 rounded-xl p-3 hover:bg-gray-50">
+                <div className="w-9 h-9 rounded-lg bg-althaia-50 text-althaia-600 flex items-center justify-center shrink-0"><Icon size={17} /></div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-800 truncate" title={doc.file_name}>{doc.file_name}</p>
+                  <p className="text-xs text-gray-400">{formatBytes(doc.file_size)} · {doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString('ca-ES') : ''}</p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <a href={doc.file_url} target="_blank" rel="noreferrer" className="p-2 text-gray-400 hover:text-althaia-600 hover:bg-althaia-50 rounded-lg" title="Obrir">
+                    <ExternalLink size={15} />
+                  </a>
+                  <a href={doc.file_url} download={doc.file_name} className="p-2 text-gray-400 hover:text-althaia-600 hover:bg-althaia-50 rounded-lg" title="Descarregar">
+                    <Download size={15} />
+                  </a>
+                  <button type="button" onClick={() => removeDocument(doc)} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg" title="Eliminar">
+                    <TrashFile size={15} />
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ProjectDetailPage() {
   const { id } = useParams()
@@ -914,6 +1059,7 @@ export default function ProjectDetailPage() {
     getTasksForProject, getFeedbackForProject,
     getPilotForProject, getEvalForProject,
     getHistoryForProject, getIdeasForProject,
+    getDocumentsForProject, addDocument, deleteDocument,
     addTask, updateTask, deleteTask,
     addTimelineEvent, deleteTimelineEvent,
     addFeedback, deleteFeedback,
@@ -947,6 +1093,7 @@ export default function ProjectDetailPage() {
   const evalRes  = getEvalForProject(project.id)
   const history  = getHistoryForProject(project.id)
   const ideas    = getIdeasForProject(project.id)
+  const documents = getDocumentsForProject(project.id)
 
   return (
     <Layout title={project.title} subtitle={project.service}>
