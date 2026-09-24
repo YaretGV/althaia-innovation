@@ -43,7 +43,7 @@ export function AppProvider({ children, currentUser, onLogout }) {
     async function load() {
       if (hasDB) {
         try {
-          const [{ data: pData, error: pErr }, { data: tData }, { data: eData }, { data: fData }] = await Promise.all([
+          const [{ data: pData, error: pErr }, { data: tData }, { data: eData }, { data: fData }, { data: dData }] = await Promise.all([
             supabase.from('projects').select('*').order('created_at', { ascending: false }),
             supabase.from('project_tasks').select('*'),
             supabase.from('timeline_events').select('*'),
