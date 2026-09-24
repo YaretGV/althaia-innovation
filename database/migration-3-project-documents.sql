@@ -18,6 +18,7 @@ on conflict (id) do update set public = true;
 -- La taula documents ja existeix a database/schema.sql.
 -- Aquestes ordres també funcionen si la migració es repeteix.
 alter table documents enable row level security;
+alter table documents add column if not exists storage_path TEXT;
 
 drop policy if exists select_documents on documents;
 create policy select_documents
