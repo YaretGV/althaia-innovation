@@ -18,6 +18,7 @@ const TABLE_OPS = {
   project_tasks:    ['insert', 'update', 'delete'],
   timeline_events:  ['insert', 'delete'],
   project_feedback: ['insert', 'delete'],
+  documents:        ['insert', 'delete'],
   ideas_bank:       ['insert', 'update', 'delete'],
   app_users:        ['update', 'delete'],
 }
