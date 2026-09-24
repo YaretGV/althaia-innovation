@@ -1388,6 +1388,16 @@ export default function ProjectDetailPage() {
               onAddEvent={addTimelineEvent} onDeleteEvent={deleteTimelineEvent}
             />
           )}
+
+          {/* ── Documentació ── */}
+          {tab === 'documents' && (
+            <DocumentsTab
+              project={project}
+              documents={documents}
+              onAdd={addDocument}
+              onDelete={deleteDocument}
+            />
+          )}
         </div>
       </div>
     </Layout>
