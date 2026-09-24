@@ -308,6 +308,7 @@ CREATE TABLE documents (
   project_id    INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   file_name     VARCHAR(255) NOT NULL,
   file_url      TEXT NOT NULL,
+  storage_path  TEXT,
   file_size     INTEGER,    -- bytes
   mime_type     VARCHAR(100),
   type          doc_type NOT NULL DEFAULT 'other',
