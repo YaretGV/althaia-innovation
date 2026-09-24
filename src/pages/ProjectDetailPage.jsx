@@ -973,7 +973,7 @@ function DocumentsTab({ project, documents, onAdd, onDelete }) {
         file_url: publicData.publicUrl,
         file_size: file.size,
         mime_type: file.type || 'application/octet-stream',
-        type: file.type === 'application/pdf' ? 'pdf' : 'other',
+        type: 'other',
         version: '1.0',
         description: '',
         uploaded_at: new Date().toISOString(),
